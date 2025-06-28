@@ -63,10 +63,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "browserTarget": "mindata-challenge:build:production"
+              "buildTarget": "mindata-challenge:build:production"
             },
             "development": {
-              "browserTarget": "mindata-challenge:build:development"
+              "buildTarget": "mindata-challenge:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -74,7 +74,7 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "mindata-challenge:build"
+            "buildTarget": "mindata-challenge:build"
           }
         },
         "test": {
