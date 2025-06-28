@@ -1,0 +1,287 @@
+<div class="hero-list-container">
+  <!-- Search Section -->
+  <div class="search-section">
+    <form [formGroup]="searchForm" class="search-form">
+      <div class="search-input-container">
+        <input
+          type="text"
+          formControlName="searchTerm"
+          placeholder="Buscar héroes por nombre, poder, ciudad o alter ego..."
+          class="search-input"
+          autocomplete="off"
+        />
+        <button
+          type="button"
+          class="add-hero-btn"
+          (click)="showAddForm()"
+          [attr.aria-label]="'Añadir nuevo héroe'"
+        >
+          Añadir Héroe
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Heroes Table -->
+  <div class="heroes-table-container" *ngIf="!showForm">
+    <ng-container *ngIf="paginatedHeroes$ | async as paginatedHeroes">
+      <table
+        class="heroes-table"
+        *ngIf="paginatedHeroes.length > 0; else noHeroes"
+      >
+        <thead>
+          <tr>
+            <th scope="col">Nombre</th>
+            <th scope="col">Superpoder</th>
+            <th scope="col">Alter Ego</th>
+            <th scope="col">Ciudad</th>
+            <th scope="col">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let hero of paginatedHeroes; trackBy: trackByHeroId"
+            class="hero-row"
+          >
+            <td>{{ hero.name }}</td>
+            <td>{{ hero.superpower }}</td>
+            <td>{{ hero.alterEgo || "N/A" }}</td>
+            <td>{{ hero.city }}</td>
+            <td class="actions-cell">
+              <button
+                type="button"
+                class="edit-btn"
+                (click)="showEditForm(hero)"
+                [attr.aria-label]="'Editar ' + hero.name"
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                class="delete-btn"
+                (click)="confirmDelete(hero)"
+                [attr.aria-label]="'Eliminar ' + hero.name"
+              >
+                Borrar
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <ng-template #noHeroes>
+        <div class="no-heroes" role="status" aria-live="polite">
+          <p>No se encontraron héroes.</p>
+        </div>
+      </ng-template>
+    </ng-container>
+
+    <!-- Pagination -->
+    <div
+      class="pagination"
+      *ngIf="totalPages > 1"
+      role="navigation"
+      aria-label="Paginación"
+    >
+      <button
+        type="button"
+        class="pagination-btn"
+        [disabled]="currentPage === 1"
+        (click)="previousPage()"
+        aria-label="Página anterior"
+      >
+        Anterior
+      </button>
+
+      <button
+        type="button"
+        *ngFor="let page of getPaginationArray(); trackBy: trackByPageNumber"
+        class="pagination-btn"
+        [class.active]="page === currentPage"
+        (click)="goToPage(page)"
+        [attr.aria-label]="'Ir a página ' + page"
+        [attr.aria-current]="page === currentPage ? 'page' : null"
+      >
+        {{ page }}
+      </button>
+
+      <button
+        type="button"
+        class="pagination-btn"
+        [disabled]="currentPage === totalPages"
+        (click)="nextPage()"
+        aria-label="Página siguiente"
+      >
+        Siguiente
+      </button>
+    </div>
+
+    <!-- Results Info -->
+    <div class="results-info" *ngIf="filteredHeroes$ | async as filteredHeroes">
+      <ng-container *ngIf="filteredHeroes.length > 0">
+        Mostrando {{ (paginatedHeroes$ | async)?.length || 0 }} de
+        {{ filteredHeroes.length }} héroes (página {{ currentPage }} de
+        {{ totalPages }})
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Hero Form -->
+  <div
+    class="hero-form-container"
+    *ngIf="showForm"
+    role="dialog"
+    aria-labelledby="form-title"
+  >
+    <div class="form-header">
+      <h2 id="form-title">
+        {{ isEditing ? "Editar Héroe" : "Añadir Nuevo Héroe" }}
+      </h2>
+      <button
+        type="button"
+        class="close-btn"
+        (click)="hideForm()"
+        aria-label="Cerrar formulario"
+      >
+        ×
+      </button>
+    </div>
+
+    <form
+      [formGroup]="heroForm"
+      (ngSubmit)="onSubmit()"
+      class="hero-form"
+      novalidate
+    >
+      <div class="form-group">
+        <label for="name">Nombre *</label>
+        <input
+          type="text"
+          id="name"
+          formControlName="name"
+          [class.error]="isFieldInvalid('name')"
+          placeholder="Nombre del héroe"
+          autocomplete="off"
+          [attr.aria-describedby]="isFieldInvalid('name') ? 'name-error' : null"
+          [attr.aria-invalid]="isFieldInvalid('name')"
+        />
+        <div
+          class="error-message"
+          *ngIf="isFieldInvalid('name')"
+          id="name-error"
+          role="alert"
+        >
+          {{ getFieldError("name") }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="superpower">Superpoder *</label>
+        <input
+          type="text"
+          id="superpower"
+          formControlName="superpower"
+          [class.error]="isFieldInvalid('superpower')"
+          placeholder="Superpoder del héroe"
+          autocomplete="off"
+          [attr.aria-describedby]="
+            isFieldInvalid('superpower') ? 'superpower-error' : null
+          "
+          [attr.aria-invalid]="isFieldInvalid('superpower')"
+        />
+        <div
+          class="error-message"
+          *ngIf="isFieldInvalid('superpower')"
+          id="superpower-error"
+          role="alert"
+        >
+          {{ getFieldError("superpower") }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="alterEgo">Alter Ego</label>
+        <input
+          type="text"
+          id="alterEgo"
+          formControlName="alterEgo"
+          placeholder="Identidad secreta (opcional)"
+          autocomplete="off"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="city">Ciudad *</label>
+        <input
+          type="text"
+          id="city"
+          formControlName="city"
+          [class.error]="isFieldInvalid('city')"
+          placeholder="Ciudad donde opera"
+          autocomplete="off"
+          [attr.aria-describedby]="isFieldInvalid('city') ? 'city-error' : null"
+          [attr.aria-invalid]="isFieldInvalid('city')"
+        />
+        <div
+          class="error-message"
+          *ngIf="isFieldInvalid('city')"
+          id="city-error"
+          role="alert"
+        >
+          {{ getFieldError("city") }}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="cancel-btn" (click)="hideForm()">
+          Cancelar
+        </button>
+        <button type="submit" class="submit-btn" [disabled]="heroForm.invalid">
+          {{ isEditing ? "Actualizar" : "Crear" }} Héroe
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div
+  class="modal-overlay"
+  *ngIf="showDeleteModal"
+  (click)="cancelDelete()"
+  role="dialog"
+  aria-labelledby="modal-title"
+  aria-modal="true"
+>
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modal-title">Confirmar Eliminación</h3>
+      <button
+        type="button"
+        class="close-btn"
+        (click)="cancelDelete()"
+        aria-label="Cerrar modal"
+      >
+        ×
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p>
+        ¿Estás seguro de que deseas eliminar al héroe
+        <strong>{{ heroToDelete?.name }}</strong
+        >?
+      </p>
+      <p class="warning">Esta acción no se puede deshacer.</p>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" (click)="cancelDelete()">
+        Cancelar
+      </button>
+      <button type="button" class="confirm-delete-btn" (click)="deleteHero()">
+        Eliminar
+      </button>
+    </div>
+  </div>
+</div>

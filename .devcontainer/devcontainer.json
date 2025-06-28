@@ -1,0 +1,13 @@
+{
+  "name": "mindata-challenge",
+  "build": { "dockerfile": "Dockerfile" },
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  },
+  "extensions": [
+    "Angular.ng-template",
+    "esbenp.prettier-vscode"
+  ],
+  "forwardPorts": [4200],
+  "postCreateCommand": "npm install"
+} 
