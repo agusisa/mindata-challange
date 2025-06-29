@@ -4,14 +4,11 @@ import {
   OnDestroy,
   ChangeDetectionStrategy,
   inject,
+  signal,
+  computed,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {
-  ReactiveFormsModule,
-  FormBuilder,
-  FormGroup,
-  Validators,
-} from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import {
   Subject,
   takeUntil,
@@ -19,8 +16,6 @@ import {
   distinctUntilChanged,
   map,
   startWith,
-  combineLatest,
-  BehaviorSubject,
 } from 'rxjs';
 import { HeroService } from '../../services/hero.service';
 import { Hero } from '../../models/hero.model';
@@ -53,8 +48,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly destroy$ = new Subject<void>();
 
-  // State management using BehaviorSubject (simulating signals)
-  private readonly _componentState = new BehaviorSubject<ComponentState>({
+  private readonly _componentState = signal<ComponentState>({
     showForm: false,
     isEditing: false,
     editingHeroId: null,
@@ -62,12 +56,14 @@ export class HeroListComponent implements OnInit, OnDestroy {
     heroToDelete: null,
   });
 
-  private readonly _paginationState = new BehaviorSubject<PaginationState>({
+  private readonly _paginationState = signal<PaginationState>({
     currentPage: 1,
     itemsPerPage: 5,
     totalItems: 0,
     totalPages: 0,
   });
+
+  private readonly _searchTerm = signal<string>('');
 
   // Forms
   readonly searchForm = this.fb.group({
@@ -82,128 +78,123 @@ export class HeroListComponent implements OnInit, OnDestroy {
     city: ['', [Validators.required]],
   });
 
-  // Computed properties (observable streams)
-  readonly componentState$ = this._componentState.asObservable();
-  readonly paginationState$ = this._paginationState.asObservable();
+  // Computed signals for derived state
+  readonly componentState = this._componentState.asReadonly();
+  readonly paginationState = this._paginationState.asReadonly();
+  readonly searchTerm = this._searchTerm.asReadonly();
 
-  // Reactive data streams
-  private readonly searchTerm$ = this.searchForm
-    .get('searchTerm')!
-    .valueChanges.pipe(
-      startWith(''),
-      debounceTime(300),
-      distinctUntilChanged(),
-      map((term) => term || '')
-    );
+  // Computed derived values
+  readonly filteredHeroes = computed(() => {
+    const heroes = this.heroService.heroes();
+    const term = this._searchTerm();
+    return term ? this.heroService.searchHeroes(term) : heroes;
+  });
 
-  readonly filteredHeroes$ = combineLatest([
-    this.heroService.heroes$,
-    this.searchTerm$,
-  ]).pipe(
-    map(([heroes, searchTerm]) => this.heroService.searchHeroes(searchTerm))
+  readonly paginatedHeroes = computed(() => {
+    const heroes = this.filteredHeroes();
+    const itemsPerPage = this._paginationState().itemsPerPage;
+    const currentPage = this.validCurrentPage();
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return heroes.slice(startIndex, endIndex);
+  });
+
+  // Computed getter methods using signals
+  readonly showForm = computed(() => this._componentState().showForm);
+  readonly isEditing = computed(() => this._componentState().isEditing);
+  readonly editingHeroId = computed(() => this._componentState().editingHeroId);
+  readonly showDeleteModal = computed(
+    () => this._componentState().showDeleteModal
   );
+  readonly heroToDelete = computed(() => this._componentState().heroToDelete);
+  readonly currentPage = computed(() => this._paginationState().currentPage);
 
-  readonly paginatedHeroes$ = combineLatest([
-    this.filteredHeroes$,
-    this._paginationState.asObservable(),
-  ]).pipe(
-    map(([heroes, pagination]) => {
-      const startIndex = (pagination.currentPage - 1) * pagination.itemsPerPage;
-      const endIndex = startIndex + pagination.itemsPerPage;
-      return heroes.slice(startIndex, endIndex);
-    })
-  );
+  // Computed pagination values - calculated directly from filtered heroes
+  readonly totalItems = computed(() => this.filteredHeroes().length);
+  readonly totalPages = computed(() => {
+    const itemsPerPage = this._paginationState().itemsPerPage;
+    const totalItems = this.totalItems();
+    return Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  });
+
+  // Ensure current page is within bounds
+  readonly validCurrentPage = computed(() => {
+    const currentPage = this._paginationState().currentPage;
+    const totalPages = this.totalPages();
+    return Math.min(Math.max(1, currentPage), totalPages);
+  });
 
   ngOnInit(): void {
-    this.setupPaginationUpdates();
+    this.setupSearchForm();
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    this._componentState.complete();
-    this._paginationState.complete();
   }
 
-  // Computed getter methods (getting current values from BehaviorSubject)
-  get showForm(): boolean {
-    return this._componentState.value.showForm;
-  }
-
-  get isEditing(): boolean {
-    return this._componentState.value.isEditing;
-  }
-
-  get editingHeroId(): string | null {
-    return this._componentState.value.editingHeroId;
-  }
-
-  get showDeleteModal(): boolean {
-    return this._componentState.value.showDeleteModal;
-  }
-
-  get heroToDelete(): Hero | null {
-    return this._componentState.value.heroToDelete;
-  }
-
-  get currentPage(): number {
-    return this._paginationState.value.currentPage;
-  }
-
-  get totalPages(): number {
-    return this._paginationState.value.totalPages;
-  }
-
-  private setupPaginationUpdates(): void {
-    this.filteredHeroes$.pipe(takeUntil(this.destroy$)).subscribe((heroes) => {
-      this.updatePagination(heroes.length);
-    });
-  }
-
-  private updatePagination(totalItems: number): void {
-    const currentState = this._paginationState.value;
-    const totalPages = Math.ceil(totalItems / currentState.itemsPerPage);
-    const currentPage = Math.min(
-      currentState.currentPage,
-      Math.max(1, totalPages)
-    );
-
-    this._paginationState.next({
-      ...currentState,
-      totalItems,
-      totalPages,
-      currentPage,
-    });
+  private setupSearchForm(): void {
+    this.searchForm
+      .get('searchTerm')!
+      .valueChanges.pipe(
+        startWith(''),
+        debounceTime(300),
+        distinctUntilChanged(),
+        map((term) => term || ''),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((term) => {
+        this._searchTerm.set(term);
+      });
   }
 
   private updateComponentState(updates: Partial<ComponentState>): void {
-    this._componentState.next({
-      ...this._componentState.value,
+    this._componentState.update((current) => ({
+      ...current,
       ...updates,
-    });
+    }));
   }
 
   // Pagination methods
   goToPage(page: number): void {
-    if (page >= 1 && page <= this.totalPages) {
-      this._paginationState.next({
-        ...this._paginationState.value,
+    if (page >= 1 && page <= this.totalPages()) {
+      this._paginationState.update((current) => ({
+        ...current,
         currentPage: page,
-      });
+      }));
     }
   }
 
   previousPage(): void {
-    this.goToPage(this.currentPage - 1);
+    this.goToPage(this.validCurrentPage() - 1);
   }
 
   nextPage(): void {
-    this.goToPage(this.currentPage + 1);
+    this.goToPage(this.validCurrentPage() + 1);
+  }
+
+  changeItemsPerPage(itemsPerPage: number): void {
+    this._paginationState.update((current) => ({
+      ...current,
+      itemsPerPage,
+      currentPage: 1,
+    }));
+  }
+
+  onItemsPerPageChange(event: Event): void {
+    const target = event.target as HTMLSelectElement;
+    const itemsPerPage = parseInt(target.value, 10);
+    this.changeItemsPerPage(itemsPerPage);
   }
 
   getPaginationArray(): readonly number[] {
-    return Array.from({ length: this.totalPages }, (_, i) => i + 1);
+    return Array.from({ length: this.totalPages() }, (_, i) => i + 1);
   }
+
+  readonly itemsPerPageOptions = [5, 10, 20, 50] as const;
+  readonly currentItemsPerPage = computed(
+    () => this._paginationState().itemsPerPage
+  );
 
   // CRUD operations
   showAddForm(): void {
@@ -237,7 +228,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
     if (this.heroForm.valid) {
       const heroData = this.heroForm.value as Hero;
 
-      if (this.isEditing) {
+      if (this.isEditing()) {
         this.heroService.updateHero(heroData);
       } else {
         this.heroService.createHero(heroData);
@@ -270,14 +261,13 @@ export class HeroListComponent implements OnInit, OnDestroy {
   }
 
   deleteHero(): void {
-    const hero = this.heroToDelete;
+    const hero = this.heroToDelete();
     if (hero) {
       this.heroService.deleteHero(hero.id);
       this.cancelDelete();
     }
   }
 
-  // Utility methods for template
   isFieldInvalid(fieldName: string): boolean {
     const field = this.heroForm.get(fieldName);
     return !!(field && field.invalid && field.touched);
@@ -303,7 +293,6 @@ export class HeroListComponent implements OnInit, OnDestroy {
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
-  // TrackBy functions for better performance
   trackByHeroId = (index: number, hero: Hero): string => hero.id;
   trackByPageNumber = (index: number, page: number): number => page;
 }

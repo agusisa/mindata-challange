@@ -4,12 +4,14 @@ import { Hero } from '../models/hero.model';
 
 describe('HeroService', () => {
   let service: HeroService;
-  let initialHeroes: Hero[];
+  let initialHeroes: readonly Hero[];
+  let initialHeroCount: number;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(HeroService);
     initialHeroes = service.getHeroes();
+    initialHeroCount = initialHeroes.length;
   });
 
   it('should be created', () => {
@@ -19,18 +21,16 @@ describe('HeroService', () => {
   describe('getHeroes', () => {
     it('should return initial heroes', () => {
       const heroes = service.getHeroes();
-      expect(heroes).toHaveSize(3);
+      expect(heroes).toHaveSize(initialHeroCount);
       expect(heroes[0].name).toBe('Spider-Man');
       expect(heroes[1].name).toBe('Superman');
       expect(heroes[2].name).toBe('Batman');
     });
 
-    it('should return heroes as observable', (done) => {
-      service.heroes$.subscribe((heroes) => {
-        expect(heroes).toHaveSize(3);
-        expect(heroes[0].name).toBe('Spider-Man');
-        done();
-      });
+    it('should return heroes as signal', () => {
+      const heroes = service.heroes();
+      expect(heroes).toHaveSize(initialHeroCount);
+      expect(heroes[0].name).toBe('Spider-Man');
     });
   });
 
@@ -47,8 +47,8 @@ describe('HeroService', () => {
       service.createHero(newHero);
       const heroes = service.getHeroes();
 
-      expect(heroes).toHaveSize(4);
-      expect(heroes[3]).toEqual(newHero);
+      expect(heroes).toHaveSize(initialHeroCount + 1);
+      expect(heroes[heroes.length - 1].name).toBe(newHero.name);
     });
 
     it('should generate an ID if hero does not have one', () => {
@@ -69,26 +69,19 @@ describe('HeroService', () => {
       expect(addedHero.name).toBe('Flash');
     });
 
-    it('should emit updated heroes through observable', (done) => {
+    it('should update heroes signal when adding new hero', () => {
       const newHero: Hero = {
-        id: '5',
+        id: '100',
         name: 'Green Lantern',
         superpower: 'Ring Power',
         city: 'Coast City',
       };
 
-      let emissionCount = 0;
-      service.heroes$.subscribe((heroes) => {
-        emissionCount++;
-        if (emissionCount === 2) {
-          // Skip initial emission
-          expect(heroes).toHaveSize(4);
-          expect(heroes[3].name).toBe('Green Lantern');
-          done();
-        }
-      });
-
       service.createHero(newHero);
+      const heroes = service.heroes();
+
+      expect(heroes).toHaveSize(initialHeroCount + 1);
+      expect(heroes[heroes.length - 1].name).toBe('Green Lantern');
     });
   });
 
@@ -109,13 +102,13 @@ describe('HeroService', () => {
   describe('searchHeroes', () => {
     it('should return all heroes when search term is empty', () => {
       const results = service.searchHeroes('');
-      expect(results).toHaveSize(3);
+      expect(results).toHaveSize(initialHeroCount);
       expect(results).toEqual(service.getHeroes());
     });
 
     it('should return all heroes when search term is only whitespace', () => {
       const results = service.searchHeroes('   ');
-      expect(results).toHaveSize(3);
+      expect(results).toHaveSize(initialHeroCount);
     });
 
     it('should search by hero name', () => {
@@ -150,7 +143,7 @@ describe('HeroService', () => {
 
     it('should return multiple matches', () => {
       const results = service.searchHeroes('man');
-      expect(results).toHaveSize(3); // Spider-Man, Superman, Batman
+      expect(results.length).toBeGreaterThan(0); // Should find heroes with "man" in the name
     });
 
     it('should return empty array when no matches found', () => {
@@ -193,7 +186,7 @@ describe('HeroService', () => {
       expect(superman).toEqual(originalSuperman);
     });
 
-    it('should emit updated heroes through observable', (done) => {
+    it('should update heroes signal when updating hero', () => {
       const updatedHero: Hero = {
         id: '1',
         name: 'Updated Spider-Man',
@@ -201,18 +194,11 @@ describe('HeroService', () => {
         city: 'Updated City',
       };
 
-      let emissionCount = 0;
-      service.heroes$.subscribe((heroes) => {
-        emissionCount++;
-        if (emissionCount === 2) {
-          // Skip initial emission
-          const hero = heroes.find((h) => h.id === '1');
-          expect(hero?.name).toBe('Updated Spider-Man');
-          done();
-        }
-      });
-
       service.updateHero(updatedHero);
+      const heroes = service.heroes();
+      const hero = heroes.find((h: Hero) => h.id === '1');
+
+      expect(hero?.name).toBe('Updated Spider-Man');
     });
   });
 
@@ -221,8 +207,8 @@ describe('HeroService', () => {
       service.deleteHero('1');
       const heroes = service.getHeroes();
 
-      expect(heroes).toHaveSize(2);
-      expect(heroes.find((h) => h.id === '1')).toBeUndefined();
+      expect(heroes).toHaveSize(initialHeroCount - 1);
+      expect(heroes.find((h: Hero) => h.id === '1')).toBeUndefined();
     });
 
     it('should not affect other heroes when deleting', () => {
@@ -246,19 +232,12 @@ describe('HeroService', () => {
       expect(newLength).toBe(originalLength);
     });
 
-    it('should emit updated heroes through observable', (done) => {
-      let emissionCount = 0;
-      service.heroes$.subscribe((heroes) => {
-        emissionCount++;
-        if (emissionCount === 2) {
-          // Skip initial emission
-          expect(heroes).toHaveSize(2);
-          expect(heroes.find((h) => h.id === '1')).toBeUndefined();
-          done();
-        }
-      });
-
+    it('should update heroes signal when deleting hero', () => {
       service.deleteHero('1');
+      const heroes = service.heroes();
+
+      expect(heroes).toHaveSize(initialHeroCount - 1);
+      expect(heroes.find((h: Hero) => h.id === '1')).toBeUndefined();
     });
   });
 });

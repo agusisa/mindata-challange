@@ -9,5 +9,7 @@
     "esbenp.prettier-vscode"
   ],
   "forwardPorts": [4200],
-  "postCreateCommand": "npm install"
+  "postCreateCommand": "cd app && npm install",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "node"
 } 

@@ -23,119 +23,126 @@
   </div>
 
   <!-- Heroes Table -->
-  <div class="heroes-table-container" *ngIf="!showForm">
-    <ng-container *ngIf="paginatedHeroes$ | async as paginatedHeroes">
-      <table
-        class="heroes-table"
-        *ngIf="paginatedHeroes.length > 0; else noHeroes"
-      >
-        <thead>
-          <tr>
-            <th scope="col">Nombre</th>
-            <th scope="col">Superpoder</th>
-            <th scope="col">Alter Ego</th>
-            <th scope="col">Ciudad</th>
-            <th scope="col">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            *ngFor="let hero of paginatedHeroes; trackBy: trackByHeroId"
-            class="hero-row"
-          >
-            <td>{{ hero.name }}</td>
-            <td>{{ hero.superpower }}</td>
-            <td>{{ hero.alterEgo || "N/A" }}</td>
-            <td>{{ hero.city }}</td>
-            <td class="actions-cell">
-              <button
-                type="button"
-                class="edit-btn"
-                (click)="showEditForm(hero)"
-                [attr.aria-label]="'Editar ' + hero.name"
-              >
-                Editar
-              </button>
-              <button
-                type="button"
-                class="delete-btn"
-                (click)="confirmDelete(hero)"
-                [attr.aria-label]="'Eliminar ' + hero.name"
-              >
-                Borrar
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <ng-template #noHeroes>
-        <div class="no-heroes" role="status" aria-live="polite">
-          <p>No se encontraron héroes.</p>
-        </div>
-      </ng-template>
-    </ng-container>
+  @if (!showForm()) {
+  <div class="heroes-table-container">
+    @if (paginatedHeroes().length > 0) {
+    <table class="heroes-table">
+      <thead>
+        <tr>
+          <th scope="col">Nombre</th>
+          <th scope="col">Superpoder</th>
+          <th scope="col">Alter Ego</th>
+          <th scope="col">Ciudad</th>
+          <th scope="col">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (hero of paginatedHeroes(); track trackByHeroId($index, hero)) {
+        <tr class="hero-row">
+          <td>{{ hero.name }}</td>
+          <td>{{ hero.superpower }}</td>
+          <td>{{ hero.alterEgo || "N/A" }}</td>
+          <td>{{ hero.city }}</td>
+          <td class="actions-cell">
+            <button
+              type="button"
+              class="edit-btn"
+              (click)="showEditForm(hero)"
+              [attr.aria-label]="'Editar ' + hero.name"
+            >
+              Editar
+            </button>
+            <button
+              type="button"
+              class="delete-btn"
+              (click)="confirmDelete(hero)"
+              [attr.aria-label]="'Eliminar ' + hero.name"
+            >
+              Borrar
+            </button>
+          </td>
+        </tr>
+        }
+      </tbody>
+    </table>
+    } @else {
+    <div class="no-heroes" role="status" aria-live="polite">
+      <p>No se encontraron héroes.</p>
+    </div>
+    }
 
     <!-- Pagination -->
-    <div
-      class="pagination"
-      *ngIf="totalPages > 1"
-      role="navigation"
-      aria-label="Paginación"
-    >
+    @if (totalPages() > 1) {
+    <div class="pagination" role="navigation" aria-label="Paginación">
       <button
         type="button"
         class="pagination-btn"
-        [disabled]="currentPage === 1"
+        [disabled]="validCurrentPage() === 1"
         (click)="previousPage()"
         aria-label="Página anterior"
       >
         Anterior
       </button>
 
+      @for (page of getPaginationArray(); track trackByPageNumber($index, page))
+      {
       <button
         type="button"
-        *ngFor="let page of getPaginationArray(); trackBy: trackByPageNumber"
         class="pagination-btn"
-        [class.active]="page === currentPage"
+        [class.active]="page === validCurrentPage()"
         (click)="goToPage(page)"
         [attr.aria-label]="'Ir a página ' + page"
-        [attr.aria-current]="page === currentPage ? 'page' : null"
+        [attr.aria-current]="page === validCurrentPage() ? 'page' : null"
       >
         {{ page }}
       </button>
+      }
 
       <button
         type="button"
         class="pagination-btn"
-        [disabled]="currentPage === totalPages"
+        [disabled]="validCurrentPage() === totalPages()"
         (click)="nextPage()"
         aria-label="Página siguiente"
       >
         Siguiente
       </button>
     </div>
+    }
 
-    <!-- Results Info -->
-    <div class="results-info" *ngIf="filteredHeroes$ | async as filteredHeroes">
-      <ng-container *ngIf="filteredHeroes.length > 0">
-        Mostrando {{ (paginatedHeroes$ | async)?.length || 0 }} de
-        {{ filteredHeroes.length }} héroes (página {{ currentPage }} de
-        {{ totalPages }})
-      </ng-container>
+    <!-- Results Info and Items per Page Selector -->
+    @if (filteredHeroes().length > 0) {
+    <div class="results-info-container">
+      <div class="results-info">
+        Mostrando {{ paginatedHeroes().length }} de
+        {{ filteredHeroes().length }} héroes (página {{ validCurrentPage() }} de
+        {{ totalPages() }})
+      </div>
+
+      <div class="items-per-page-selector">
+        <label for="itemsPerPage">Elementos por página:</label>
+        <select
+          id="itemsPerPage"
+          [value]="currentItemsPerPage()"
+          (change)="onItemsPerPageChange($event)"
+          class="items-per-page-select"
+        >
+          @for (option of itemsPerPageOptions; track option) {
+          <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </div>
     </div>
+    }
   </div>
+  }
 
   <!-- Hero Form -->
-  <div
-    class="hero-form-container"
-    *ngIf="showForm"
-    role="dialog"
-    aria-labelledby="form-title"
-  >
+  @if (showForm()) {
+  <div class="hero-form-container" role="dialog" aria-labelledby="form-title">
     <div class="form-header">
       <h2 id="form-title">
-        {{ isEditing ? "Editar Héroe" : "Añadir Nuevo Héroe" }}
+        {{ isEditing() ? "Editar Héroe" : "Añadir Nuevo Héroe" }}
       </h2>
       <button
         type="button"
@@ -165,14 +172,11 @@
           [attr.aria-describedby]="isFieldInvalid('name') ? 'name-error' : null"
           [attr.aria-invalid]="isFieldInvalid('name')"
         />
-        <div
-          class="error-message"
-          *ngIf="isFieldInvalid('name')"
-          id="name-error"
-          role="alert"
-        >
+        @if (isFieldInvalid('name')) {
+        <div class="error-message" id="name-error" role="alert">
           {{ getFieldError("name") }}
         </div>
+        }
       </div>
 
       <div class="form-group">
@@ -189,14 +193,11 @@
           "
           [attr.aria-invalid]="isFieldInvalid('superpower')"
         />
-        <div
-          class="error-message"
-          *ngIf="isFieldInvalid('superpower')"
-          id="superpower-error"
-          role="alert"
-        >
+        @if (isFieldInvalid('superpower')) {
+        <div class="error-message" id="superpower-error" role="alert">
           {{ getFieldError("superpower") }}
         </div>
+        }
       </div>
 
       <div class="form-group">
@@ -222,14 +223,11 @@
           [attr.aria-describedby]="isFieldInvalid('city') ? 'city-error' : null"
           [attr.aria-invalid]="isFieldInvalid('city')"
         />
-        <div
-          class="error-message"
-          *ngIf="isFieldInvalid('city')"
-          id="city-error"
-          role="alert"
-        >
+        @if (isFieldInvalid('city')) {
+        <div class="error-message" id="city-error" role="alert">
           {{ getFieldError("city") }}
         </div>
+        }
       </div>
 
       <div class="form-actions">
@@ -237,17 +235,18 @@
           Cancelar
         </button>
         <button type="submit" class="submit-btn" [disabled]="heroForm.invalid">
-          {{ isEditing ? "Actualizar" : "Crear" }} Héroe
+          {{ isEditing() ? "Actualizar" : "Crear" }} Héroe
         </button>
       </div>
     </form>
   </div>
+  }
 </div>
 
 <!-- Delete Confirmation Modal -->
+@if (showDeleteModal()) {
 <div
   class="modal-overlay"
-  *ngIf="showDeleteModal"
   (click)="cancelDelete()"
   role="dialog"
   aria-labelledby="modal-title"
@@ -269,7 +268,7 @@
     <div class="modal-body">
       <p>
         ¿Estás seguro de que deseas eliminar al héroe
-        <strong>{{ heroToDelete?.name }}</strong
+        <strong>{{ heroToDelete()?.name }}</strong
         >?
       </p>
       <p class="warning">Esta acción no se puede deshacer.</p>
@@ -285,3 +284,4 @@
     </div>
   </div>
 </div>
+}
