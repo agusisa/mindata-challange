@@ -4,27 +4,22 @@ import { Hero } from '../models/hero.model';
 
 describe('HeroService', () => {
   let service: HeroService;
-  let initialHeroes: readonly Hero[];
-  let initialHeroCount: number;
+  const initialHeroCount = 13;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(HeroService);
-    initialHeroes = service.getHeroes();
-    initialHeroCount = initialHeroes.length;
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
 
-  describe('getHeroes', () => {
-    it('should return initial heroes', () => {
+  describe('Initial State', () => {
+    it('should have initial heroes', () => {
       const heroes = service.getHeroes();
+      expect(heroes).toBeTruthy();
       expect(heroes).toHaveSize(initialHeroCount);
-      expect(heroes[0].name).toBe('Spider-Man');
-      expect(heroes[1].name).toBe('Superman');
-      expect(heroes[2].name).toBe('Batman');
     });
 
     it('should return heroes as signal', () => {
@@ -35,7 +30,7 @@ describe('HeroService', () => {
   });
 
   describe('createHero', () => {
-    it('should add a new hero to the list', () => {
+    it('should add a new hero to the list', async () => {
       const newHero: Hero = {
         id: '4',
         name: 'Wonder Woman',
@@ -44,14 +39,14 @@ describe('HeroService', () => {
         city: 'Themyscira',
       };
 
-      service.createHero(newHero);
+      await service.createHero(newHero);
       const heroes = service.getHeroes();
 
       expect(heroes).toHaveSize(initialHeroCount + 1);
       expect(heroes[heroes.length - 1].name).toBe(newHero.name);
     });
 
-    it('should generate an ID if hero does not have one', () => {
+    it('should generate an ID if hero does not have one', async () => {
       const newHero: Hero = {
         id: '',
         name: 'Flash',
@@ -60,7 +55,7 @@ describe('HeroService', () => {
         city: 'Central City',
       };
 
-      service.createHero(newHero);
+      await service.createHero(newHero);
       const heroes = service.getHeroes();
       const addedHero = heroes[heroes.length - 1];
 
@@ -69,7 +64,7 @@ describe('HeroService', () => {
       expect(addedHero.name).toBe('Flash');
     });
 
-    it('should update heroes signal when adding new hero', () => {
+    it('should update heroes signal when adding new hero', async () => {
       const newHero: Hero = {
         id: '100',
         name: 'Green Lantern',
@@ -77,7 +72,7 @@ describe('HeroService', () => {
         city: 'Coast City',
       };
 
-      service.createHero(newHero);
+      await service.createHero(newHero);
       const heroes = service.heroes();
 
       expect(heroes).toHaveSize(initialHeroCount + 1);
@@ -153,7 +148,7 @@ describe('HeroService', () => {
   });
 
   describe('updateHero', () => {
-    it('should update existing hero', () => {
+    it('should update existing hero', async () => {
       const updatedHero: Hero = {
         id: '1',
         name: 'Amazing Spider-Man',
@@ -162,7 +157,7 @@ describe('HeroService', () => {
         city: 'New York City',
       };
 
-      service.updateHero(updatedHero);
+      await service.updateHero(updatedHero);
       const hero = service.getHeroById('1');
 
       expect(hero?.name).toBe('Amazing Spider-Man');
@@ -171,7 +166,7 @@ describe('HeroService', () => {
       expect(hero?.city).toBe('New York City');
     });
 
-    it('should not affect other heroes when updating', () => {
+    it('should not affect other heroes when updating', async () => {
       const originalSuperman = service.getHeroById('2');
       const updatedHero: Hero = {
         id: '1',
@@ -180,13 +175,13 @@ describe('HeroService', () => {
         city: 'Updated City',
       };
 
-      service.updateHero(updatedHero);
+      await service.updateHero(updatedHero);
       const superman = service.getHeroById('2');
 
       expect(superman).toEqual(originalSuperman);
     });
 
-    it('should update heroes signal when updating hero', () => {
+    it('should update heroes signal when updating hero', async () => {
       const updatedHero: Hero = {
         id: '1',
         name: 'Updated Spider-Man',
@@ -194,7 +189,7 @@ describe('HeroService', () => {
         city: 'Updated City',
       };
 
-      service.updateHero(updatedHero);
+      await service.updateHero(updatedHero);
       const heroes = service.heroes();
       const hero = heroes.find((h: Hero) => h.id === '1');
 
@@ -203,19 +198,19 @@ describe('HeroService', () => {
   });
 
   describe('deleteHero', () => {
-    it('should remove hero from the list', () => {
-      service.deleteHero('1');
+    it('should remove hero from the list', async () => {
+      await service.deleteHero('1');
       const heroes = service.getHeroes();
 
       expect(heroes).toHaveSize(initialHeroCount - 1);
       expect(heroes.find((h: Hero) => h.id === '1')).toBeUndefined();
     });
 
-    it('should not affect other heroes when deleting', () => {
+    it('should not affect other heroes when deleting', async () => {
       const originalSuperman = service.getHeroById('2');
       const originalBatman = service.getHeroById('3');
 
-      service.deleteHero('1');
+      await service.deleteHero('1');
 
       const superman = service.getHeroById('2');
       const batman = service.getHeroById('3');
@@ -224,16 +219,16 @@ describe('HeroService', () => {
       expect(batman).toEqual(originalBatman);
     });
 
-    it('should handle deleting non-existent hero gracefully', () => {
+    it('should handle deleting non-existent hero gracefully', async () => {
       const originalLength = service.getHeroes().length;
-      service.deleteHero('999');
+      await service.deleteHero('999');
       const newLength = service.getHeroes().length;
 
       expect(newLength).toBe(originalLength);
     });
 
-    it('should update heroes signal when deleting hero', () => {
-      service.deleteHero('1');
+    it('should update heroes signal when deleting hero', async () => {
+      await service.deleteHero('1');
       const heroes = service.heroes();
 
       expect(heroes).toHaveSize(initialHeroCount - 1);

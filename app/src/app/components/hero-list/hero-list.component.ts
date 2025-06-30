@@ -6,6 +6,7 @@ import {
   inject,
   signal,
   computed,
+  effect,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
@@ -18,7 +19,9 @@ import {
   startWith,
 } from 'rxjs';
 import { HeroService } from '../../services/hero.service';
+import { LoadingService } from '../../services/loading.service';
 import { Hero } from '../../models/hero.model';
+import { UppercaseDirective } from '../../directives/uppercase.directive';
 
 interface PaginationState {
   readonly currentPage: number;
@@ -33,18 +36,20 @@ interface ComponentState {
   readonly editingHeroId: string | null;
   readonly showDeleteModal: boolean;
   readonly heroToDelete: Hero | null;
+  readonly error: string | null;
 }
 
 @Component({
   selector: 'app-hero-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, UppercaseDirective],
   templateUrl: './hero-list.component.html',
   styleUrls: ['./hero-list.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HeroListComponent implements OnInit, OnDestroy {
   private readonly heroService = inject(HeroService);
+  private readonly loadingService = inject(LoadingService);
   private readonly fb = inject(FormBuilder);
   private readonly destroy$ = new Subject<void>();
 
@@ -54,6 +59,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
     editingHeroId: null,
     showDeleteModal: false,
     heroToDelete: null,
+    error: null,
   });
 
   private readonly _paginationState = signal<PaginationState>({
@@ -78,12 +84,25 @@ export class HeroListComponent implements OnInit, OnDestroy {
     city: ['', [Validators.required]],
   });
 
-  // Computed signals for derived state
+  // Effect to handle form disabled state based on loading
+  private readonly loadingEffect = effect(() => {
+    const isLoading = this.loadingService.shouldShowLoading();
+
+    if (isLoading) {
+      this.searchForm.disable();
+      this.heroForm.disable();
+    } else {
+      this.searchForm.enable();
+      this.heroForm.enable();
+    }
+  });
+
   readonly componentState = this._componentState.asReadonly();
   readonly paginationState = this._paginationState.asReadonly();
   readonly searchTerm = this._searchTerm.asReadonly();
 
-  // Computed derived values
+  readonly isLoading = this.loadingService.shouldShowLoading;
+
   readonly filteredHeroes = computed(() => {
     const heroes = this.heroService.heroes();
     const term = this._searchTerm();
@@ -108,6 +127,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
   );
   readonly heroToDelete = computed(() => this._componentState().heroToDelete);
   readonly currentPage = computed(() => this._paginationState().currentPage);
+  readonly error = computed(() => this._componentState().error);
 
   // Computed pagination values - calculated directly from filtered heroes
   readonly totalItems = computed(() => this.filteredHeroes().length);
@@ -155,6 +175,17 @@ export class HeroListComponent implements OnInit, OnDestroy {
     }));
   }
 
+  clearError(): void {
+    this.updateComponentState({ error: null });
+  }
+
+  private handleError(error: any, operation: string): void {
+    console.error(`Error during ${operation}:`, error);
+    this.updateComponentState({
+      error: `Error ${operation}. Please try again.`,
+    });
+  }
+
   // Pagination methods
   goToPage(page: number): void {
     if (page >= 1 && page <= this.totalPages()) {
@@ -198,6 +229,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
 
   // CRUD operations
   showAddForm(): void {
+    this.clearError();
     this.updateComponentState({
       showForm: true,
       isEditing: false,
@@ -207,6 +239,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
   }
 
   showEditForm(hero: Hero): void {
+    this.clearError();
     this.updateComponentState({
       showForm: true,
       isEditing: true,
@@ -216,6 +249,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
   }
 
   hideForm(): void {
+    this.clearError();
     this.updateComponentState({
       showForm: false,
       isEditing: false,
@@ -224,17 +258,24 @@ export class HeroListComponent implements OnInit, OnDestroy {
     this.heroForm.reset();
   }
 
-  onSubmit(): void {
+  async onSubmit(): Promise<void> {
     if (this.heroForm.valid) {
+      this.clearError();
       const heroData = this.heroForm.value as Hero;
 
-      if (this.isEditing()) {
-        this.heroService.updateHero(heroData);
-      } else {
-        this.heroService.createHero(heroData);
+      try {
+        if (this.isEditing()) {
+          await this.heroService.updateHero(heroData);
+        } else {
+          await this.heroService.createHero(heroData);
+        }
+        this.hideForm();
+      } catch (error) {
+        this.handleError(
+          error,
+          this.isEditing() ? 'updating hero' : 'creating hero'
+        );
       }
-
-      this.hideForm();
     } else {
       this.markFormGroupTouched();
     }
@@ -247,6 +288,7 @@ export class HeroListComponent implements OnInit, OnDestroy {
   }
 
   confirmDelete(hero: Hero): void {
+    this.clearError();
     this.updateComponentState({
       heroToDelete: hero,
       showDeleteModal: true,
@@ -254,17 +296,23 @@ export class HeroListComponent implements OnInit, OnDestroy {
   }
 
   cancelDelete(): void {
+    this.clearError();
     this.updateComponentState({
       heroToDelete: null,
       showDeleteModal: false,
     });
   }
 
-  deleteHero(): void {
+  async deleteHero(): Promise<void> {
     const hero = this.heroToDelete();
     if (hero) {
-      this.heroService.deleteHero(hero.id);
-      this.cancelDelete();
+      this.clearError();
+      try {
+        await this.heroService.deleteHero(hero.id);
+        this.cancelDelete();
+      } catch (error) {
+        this.handleError(error, 'deleting hero');
+      }
     }
   }
 

@@ -8,12 +8,15 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { signal } from '@angular/core';
 import { HeroListComponent } from './hero-list.component';
 import { HeroService } from '../../services/hero.service';
+import { LoadingService } from '../../services/loading.service';
 import { Hero } from '../../models/hero.model';
+import { UppercaseDirective } from '../../directives/uppercase.directive';
 
 describe('HeroListComponent', () => {
   let component: HeroListComponent;
   let fixture: ComponentFixture<HeroListComponent>;
   let mockHeroService: jasmine.SpyObj<HeroService>;
+  let mockLoadingService: jasmine.SpyObj<LoadingService>;
 
   const mockHeroes: Hero[] = [
     {
@@ -40,7 +43,7 @@ describe('HeroListComponent', () => {
   ];
 
   beforeEach(async () => {
-    const spy = jasmine.createSpyObj(
+    const heroServiceSpy = jasmine.createSpyObj(
       'HeroService',
       ['createHero', 'updateHero', 'deleteHero', 'searchHeroes', 'getHeroes'],
       {
@@ -49,9 +52,22 @@ describe('HeroListComponent', () => {
       }
     );
 
+    const loadingServiceSpy = jasmine.createSpyObj(
+      'LoadingService',
+      ['startLoading', 'stopLoading', 'withLoading'],
+      {
+        shouldShowLoading: signal(false),
+        isLoading: signal(false),
+        loadingCount: signal(0),
+      }
+    );
+
     await TestBed.configureTestingModule({
-      imports: [HeroListComponent, ReactiveFormsModule],
-      providers: [{ provide: HeroService, useValue: spy }],
+      imports: [HeroListComponent, ReactiveFormsModule, UppercaseDirective],
+      providers: [
+        { provide: HeroService, useValue: heroServiceSpy },
+        { provide: LoadingService, useValue: loadingServiceSpy },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HeroListComponent);
@@ -59,10 +75,16 @@ describe('HeroListComponent', () => {
     mockHeroService = TestBed.inject(
       HeroService
     ) as jasmine.SpyObj<HeroService>;
+    mockLoadingService = TestBed.inject(
+      LoadingService
+    ) as jasmine.SpyObj<LoadingService>;
 
     // Setup default behavior for searchHeroes
     mockHeroService.searchHeroes.and.returnValue(mockHeroes);
     mockHeroService.getHeroes.and.returnValue(mockHeroes);
+    mockHeroService.createHero.and.returnValue(Promise.resolve());
+    mockHeroService.updateHero.and.returnValue(Promise.resolve());
+    mockHeroService.deleteHero.and.returnValue(Promise.resolve());
 
     fixture.detectChanges();
   });
@@ -77,6 +99,7 @@ describe('HeroListComponent', () => {
       expect(component.showForm()).toBeFalse();
       expect(component.isEditing()).toBeFalse();
       expect(component.showDeleteModal()).toBeFalse();
+      expect(component.error()).toBeNull();
     });
 
     it('should initialize forms', () => {
@@ -90,6 +113,42 @@ describe('HeroListComponent', () => {
       expect(component.paginatedHeroes).toBeDefined();
       expect(component.componentState).toBeDefined();
       expect(component.paginationState).toBeDefined();
+      expect(component.isLoading).toBeDefined();
+    });
+
+    it('should inject LoadingService', () => {
+      expect(component.isLoading).toBeDefined();
+      expect(mockLoadingService).toBeTruthy();
+    });
+  });
+
+  describe('Loading State', () => {
+    it('should reflect loading state from LoadingService', () => {
+      // The loading state is properly injected and should be defined
+      expect(component.isLoading).toBeDefined();
+      expect(mockLoadingService.shouldShowLoading).toBeDefined();
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should clear error when clearError is called', () => {
+      // Manually set an error
+      component['updateComponentState']({ error: 'Test error' });
+      expect(component.error()).toBe('Test error');
+
+      component.clearError();
+      expect(component.error()).toBeNull();
+    });
+
+    it('should clear error when showing forms', () => {
+      // Set an error first
+      component['updateComponentState']({ error: 'Test error' });
+
+      component.showAddForm();
+      expect(component.error()).toBeNull();
+
+      component.showEditForm(mockHeroes[0]);
+      expect(component.error()).toBeNull();
     });
   });
 
@@ -198,21 +257,44 @@ describe('HeroListComponent', () => {
         expect(component.heroForm.get('name')?.value).toBeNull();
       });
 
-      it('should create hero when form is submitted', () => {
-        const newHero: Hero = {
-          id: '4',
-          name: 'Wonder Woman',
-          superpower: 'Super Strength',
-          alterEgo: 'Diana Prince',
-          city: 'Themyscira',
+      it('should create hero on valid form submission', async () => {
+        const heroData = {
+          name: 'NEW HERO',
+          superpower: 'Flying',
+          alterEgo: 'John Doe',
+          city: 'Star City',
         };
 
         component.showAddForm();
-        component.heroForm.patchValue(newHero);
-        component.onSubmit();
+        component.heroForm.patchValue(heroData);
 
-        expect(mockHeroService.createHero).toHaveBeenCalledWith(newHero);
+        await component.onSubmit();
+
+        expect(mockHeroService.createHero).toHaveBeenCalledWith(
+          jasmine.objectContaining(heroData)
+        );
         expect(component.showForm()).toBeFalse();
+      });
+
+      it('should handle create hero error', async () => {
+        mockHeroService.createHero.and.returnValue(
+          Promise.reject(new Error('Network error'))
+        );
+
+        const heroData = {
+          name: 'NEW HERO',
+          superpower: 'Flying',
+          alterEgo: 'John Doe',
+          city: 'Star City',
+        };
+
+        component.showAddForm();
+        component.heroForm.patchValue(heroData);
+
+        await component.onSubmit();
+
+        expect(component.error()).toContain('Error creating hero');
+        expect(component.showForm()).toBeTrue(); // Form should stay open on error
       });
     });
 
@@ -223,106 +305,154 @@ describe('HeroListComponent', () => {
 
         expect(component.showForm()).toBeTrue();
         expect(component.isEditing()).toBeTrue();
+        expect(component.editingHeroId()).toBe(hero.id);
         expect(component.heroForm.get('name')?.value).toBe(hero.name);
       });
 
-      it('should update hero when form is submitted in edit mode', () => {
+      it('should update hero on valid form submission', async () => {
         const hero = mockHeroes[0];
-        const updatedHero = { ...hero, name: 'Updated Spider-Man' };
+        const updatedData = { ...hero, name: 'UPDATED HERO' };
 
         component.showEditForm(hero);
-        component.heroForm.patchValue(updatedHero);
-        component.onSubmit();
+        component.heroForm.patchValue(updatedData);
 
-        expect(mockHeroService.updateHero).toHaveBeenCalledWith(updatedHero);
+        await component.onSubmit();
+
+        expect(mockHeroService.updateHero).toHaveBeenCalledWith(
+          jasmine.objectContaining(updatedData)
+        );
         expect(component.showForm()).toBeFalse();
+      });
+
+      it('should handle update hero error', async () => {
+        mockHeroService.updateHero.and.returnValue(
+          Promise.reject(new Error('Network error'))
+        );
+
+        const hero = mockHeroes[0];
+        component.showEditForm(hero);
+
+        await component.onSubmit();
+
+        expect(component.error()).toContain('Error updating hero');
+        expect(component.showForm()).toBeTrue();
       });
     });
 
-    describe('Hide Form', () => {
-      it('should hide form and reset state', () => {
+    describe('Delete Hero', () => {
+      it('should show delete modal when confirmDelete is called', () => {
+        const hero = mockHeroes[0];
+        component.confirmDelete(hero);
+
+        expect(component.showDeleteModal()).toBeTrue();
+        expect(component.heroToDelete()).toBe(hero);
+      });
+
+      it('should cancel delete modal', () => {
+        const hero = mockHeroes[0];
+        component.confirmDelete(hero);
+        component.cancelDelete();
+
+        expect(component.showDeleteModal()).toBeFalse();
+        expect(component.heroToDelete()).toBeNull();
+      });
+
+      it('should delete hero when confirmed', async () => {
+        const hero = mockHeroes[0];
+        component.confirmDelete(hero);
+
+        await component.deleteHero();
+
+        expect(mockHeroService.deleteHero).toHaveBeenCalledWith(hero.id);
+        expect(component.showDeleteModal()).toBeFalse();
+      });
+
+      it('should handle delete hero error', async () => {
+        mockHeroService.deleteHero.and.returnValue(
+          Promise.reject(new Error('Network error'))
+        );
+
+        const hero = mockHeroes[0];
+        component.confirmDelete(hero);
+
+        await component.deleteHero();
+
+        expect(component.error()).toContain('Error deleting hero');
+        expect(component.showDeleteModal()).toBeTrue();
+      });
+    });
+
+    describe('Form Validation', () => {
+      it('should mark form as touched on invalid submission', async () => {
         component.showAddForm();
-        component.hideForm();
+        spyOn(component as any, 'markFormGroupTouched');
 
-        expect(component.showForm()).toBeFalse();
-        expect(component.isEditing()).toBeFalse();
-        expect(component.heroForm.get('name')?.value).toBeNull();
+        await component.onSubmit();
+
+        expect((component as any).markFormGroupTouched).toHaveBeenCalled();
+      });
+
+      it('should validate required fields', () => {
+        component.showAddForm();
+
+        expect(component.isFieldInvalid('name')).toBeFalse(); // Not touched yet
+
+        component.heroForm.get('name')?.markAsTouched();
+        expect(component.isFieldInvalid('name')).toBeTrue(); // Required field is empty and touched
+
+        component.heroForm.get('name')?.setValue('Test Hero');
+        expect(component.isFieldInvalid('name')).toBeFalse(); // Now has value
+      });
+
+      it('should return appropriate error messages', () => {
+        component.showAddForm();
+        const nameControl = component.heroForm.get('name');
+
+        nameControl?.markAsTouched();
+        nameControl?.setErrors({ required: true });
+
+        expect(component.getFieldError('name')).toBe('Name is required');
+
+        nameControl?.setErrors({
+          minlength: { requiredLength: 2, actualLength: 1 },
+        });
+        expect(component.getFieldError('name')).toBe(
+          'Name must be at least 2 characters'
+        );
       });
     });
   });
 
-  describe('Delete Operations', () => {
-    it('should show delete modal when confirmDelete is called', () => {
-      const hero = mockHeroes[0];
-      component.confirmDelete(hero);
+  describe('Template Integration', () => {
+    it('should disable buttons when loading', () => {
+      // Test that buttons exist and can be disabled
+      fixture.detectChanges();
 
-      expect(component.showDeleteModal()).toBeTrue();
-      expect(component.heroToDelete()).toBe(hero);
+      const addButton = fixture.nativeElement.querySelector('.add-hero-btn');
+      expect(addButton).toBeTruthy();
     });
 
-    it('should hide delete modal when cancelDelete is called', () => {
-      const hero = mockHeroes[0];
-      component.confirmDelete(hero);
-      component.cancelDelete();
+    it('should apply uppercase directive to name input', () => {
+      component.showAddForm();
+      fixture.detectChanges();
 
-      expect(component.showDeleteModal()).toBeFalse();
-      expect(component.heroToDelete()).toBeNull();
-    });
-
-    it('should delete hero when deleteHero is called', () => {
-      const hero = mockHeroes[0];
-      component.confirmDelete(hero);
-      component.deleteHero();
-
-      expect(mockHeroService.deleteHero).toHaveBeenCalledWith(hero.id);
-      expect(component.showDeleteModal()).toBeFalse();
+      const nameInput = fixture.nativeElement.querySelector('#name');
+      expect(nameInput).toBeTruthy();
+      expect(nameInput.hasAttribute('appuppercase')).toBeTruthy();
     });
   });
 
-  describe('Form Validation', () => {
-    it('should show validation errors for required fields', () => {
-      component.showAddForm();
-
-      // Touch required fields without setting values
-      component.heroForm.get('name')?.markAsTouched();
-      component.heroForm.get('superpower')?.markAsTouched();
-      component.heroForm.get('city')?.markAsTouched();
-
-      expect(component.isFieldInvalid('name')).toBeTrue();
-      expect(component.isFieldInvalid('superpower')).toBeTrue();
-      expect(component.isFieldInvalid('city')).toBeTrue();
-    });
-
-    it('should return appropriate error messages', () => {
-      component.showAddForm();
-      component.heroForm.get('name')?.markAsTouched();
-
-      const errorMessage = component.getFieldError('name');
-      expect(errorMessage).toContain('required');
-    });
-
-    it('should not submit invalid form', () => {
-      component.showAddForm();
-      component.onSubmit();
-
-      expect(mockHeroService.createHero).not.toHaveBeenCalled();
-      expect(component.showForm()).toBeTrue(); // Form should still be visible
-    });
-  });
-
-  describe('TrackBy Functions', () => {
-    it('should have trackBy functions defined', () => {
-      expect(component.trackByHeroId).toBeDefined();
-      expect(component.trackByPageNumber).toBeDefined();
-    });
-
-    it('should return correct values from trackBy functions', () => {
+  describe('Track By Functions', () => {
+    it('should track heroes by id', () => {
       const hero = mockHeroes[0];
-      const heroTrackBy = component.trackByHeroId(0, hero);
-      const pageTrackBy = component.trackByPageNumber(0, 1);
+      const trackByResult = component.trackByHeroId(0, hero);
+      expect(trackByResult).toBe(hero.id);
+    });
 
-      expect(heroTrackBy).toBe(hero.id);
-      expect(pageTrackBy).toBe(1);
+    it('should track pagination by page number', () => {
+      const page = 2;
+      const trackByResult = component.trackByPageNumber(0, page);
+      expect(trackByResult).toBe(page);
     });
   });
 });

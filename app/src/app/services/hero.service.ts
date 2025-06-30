@@ -1,23 +1,30 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Hero } from '../models/hero.model';
+import { LoadingService } from './loading.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class HeroService {
+  private readonly loadingService = inject(LoadingService);
   private readonly _heroes = signal<Hero[]>(this.getInitialHeroes());
 
   // Public readonly signals
   readonly heroes = this._heroes.asReadonly();
   readonly heroCount = computed(() => this.heroes().length);
 
-  createHero(hero: Omit<Hero, 'id'> | Hero): void {
-    const newHero: Hero = {
-      ...hero,
-      id: 'id' in hero && hero.id ? hero.id : this.generateId(),
-    };
+  async createHero(hero: Omit<Hero, 'id'> | Hero): Promise<void> {
+    return this.loadingService.withLoading(async () => {
+      // Simulate API delay
+      await this.delay(800);
 
-    this._heroes.update((heroes) => [...heroes, newHero]);
+      const newHero: Hero = {
+        ...hero,
+        id: 'id' in hero && hero.id ? hero.id : this.generateId(),
+      };
+
+      this._heroes.update((heroes) => [...heroes, newHero]);
+    });
   }
 
   getHeroes(): readonly Hero[] {
@@ -39,20 +46,30 @@ export class HeroService {
     );
   }
 
-  updateHero(updatedHero: Hero): void {
-    this._heroes.update((heroes) => {
-      const index = heroes.findIndex((hero) => hero.id === updatedHero.id);
-      if (index !== -1) {
-        const updatedHeroes = [...heroes];
-        updatedHeroes[index] = { ...updatedHero };
-        return updatedHeroes;
-      }
-      return heroes;
+  async updateHero(updatedHero: Hero): Promise<void> {
+    return this.loadingService.withLoading(async () => {
+      // Simulate API delay
+      await this.delay(600);
+
+      this._heroes.update((heroes) => {
+        const index = heroes.findIndex((hero) => hero.id === updatedHero.id);
+        if (index !== -1) {
+          const updatedHeroes = [...heroes];
+          updatedHeroes[index] = { ...updatedHero };
+          return updatedHeroes;
+        }
+        return heroes;
+      });
     });
   }
 
-  deleteHero(id: string): void {
-    this._heroes.update((heroes) => heroes.filter((hero) => hero.id !== id));
+  async deleteHero(id: string): Promise<void> {
+    return this.loadingService.withLoading(async () => {
+      // Simulate API delay
+      await this.delay(500);
+
+      this._heroes.update((heroes) => heroes.filter((hero) => hero.id !== id));
+    });
   }
 
   private matchesSearchTerm(hero: Hero, searchTerm: string): boolean {
@@ -70,6 +87,13 @@ export class HeroService {
 
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Simulate network delay
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private getInitialHeroes(): Hero[] {
