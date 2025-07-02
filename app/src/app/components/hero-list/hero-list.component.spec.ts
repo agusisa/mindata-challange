@@ -277,6 +277,8 @@ describe('HeroListComponent', () => {
       });
 
       it('should handle create hero error', async () => {
+        spyOn(console, 'error');
+
         mockHeroService.createHero.and.returnValue(
           Promise.reject(new Error('Network error'))
         );
@@ -295,6 +297,10 @@ describe('HeroListComponent', () => {
 
         expect(component.error()).toContain('Error creating hero');
         expect(component.showForm()).toBeTrue(); // Form should stay open on error
+        expect(console.error).toHaveBeenCalledWith(
+          'Error during creating hero:',
+          jasmine.any(Error)
+        );
       });
     });
 
@@ -325,6 +331,8 @@ describe('HeroListComponent', () => {
       });
 
       it('should handle update hero error', async () => {
+        spyOn(console, 'error');
+
         mockHeroService.updateHero.and.returnValue(
           Promise.reject(new Error('Network error'))
         );
@@ -336,6 +344,10 @@ describe('HeroListComponent', () => {
 
         expect(component.error()).toContain('Error updating hero');
         expect(component.showForm()).toBeTrue();
+        expect(console.error).toHaveBeenCalledWith(
+          'Error during updating hero:',
+          jasmine.any(Error)
+        );
       });
     });
 
@@ -368,6 +380,8 @@ describe('HeroListComponent', () => {
       });
 
       it('should handle delete hero error', async () => {
+        spyOn(console, 'error');
+
         mockHeroService.deleteHero.and.returnValue(
           Promise.reject(new Error('Network error'))
         );
@@ -379,6 +393,10 @@ describe('HeroListComponent', () => {
 
         expect(component.error()).toContain('Error deleting hero');
         expect(component.showDeleteModal()).toBeTrue();
+        expect(console.error).toHaveBeenCalledWith(
+          'Error during deleting hero:',
+          jasmine.any(Error)
+        );
       });
     });
 
